@@ -1,6 +1,8 @@
 # 필수로 넣어주어야 한다!
 node_modules/
 
+kobert_model_epoch_5.pth
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -161,5 +163,3 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
-node_modules
-node_modules
