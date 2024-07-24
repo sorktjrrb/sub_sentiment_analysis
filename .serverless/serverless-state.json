@@ -178,7 +178,7 @@
             "Type": "AWS::Lambda::Function",
             "Properties": {
               "Code": {
-                "ImageUri": "851725622904.dkr.ecr.ap-northeast-2.amazonaws.com/aws-sentiment-analysis@sha256:c0ad7a9aa45d422848317cbb5d2902d14d807460444d318a9b1da64390614538"
+                "ImageUri": "851725622904.dkr.ecr.ap-northeast-2.amazonaws.com/aws-sentiment-analysis@sha256:8f4a25d142543b5fb4fc0ad9b24341eb1d0881e931d3540b6a847794b1fb52b0"
               },
               "PackageType": "Image",
               "FunctionName": "aws-sentiment-analysis-dev-app",
@@ -200,14 +200,14 @@
               "AppLogGroup"
             ]
           },
-          "AppLambdaVersion2OiUzPPYwZXfsCnlxdM251Fapv1JsaD8rabIHlaWF4": {
+          "AppLambdaVersionrm7os07l48sOsqATyY70AisTlMEWG6XfoKehtC5xbmw": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "AppLambdaFunction"
               },
-              "CodeSha256": "c0ad7a9aa45d422848317cbb5d2902d14d807460444d318a9b1da64390614538"
+              "CodeSha256": "8f4a25d142543b5fb4fc0ad9b24341eb1d0881e931d3540b6a847794b1fb52b0"
             }
           },
           "HttpApi": {
@@ -315,7 +315,7 @@
           "AppLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "AppLambdaVersion2OiUzPPYwZXfsCnlxdM251Fapv1JsaD8rabIHlaWF4"
+              "Ref": "AppLambdaVersionrm7os07l48sOsqATyY70AisTlMEWG6XfoKehtC5xbmw"
             },
             "Export": {
               "Name": "sls-aws-sentiment-analysis-dev-AppLambdaFunctionQualifiedArn"
@@ -462,7 +462,7 @@
         "package": {},
         "memory": 2048,
         "vpc": {},
-        "versionLogicalId": "AppLambdaVersion2OiUzPPYwZXfsCnlxdM251Fapv1JsaD8rabIHlaWF4"
+        "versionLogicalId": "AppLambdaVersionrm7os07l48sOsqATyY70AisTlMEWG6XfoKehtC5xbmw"
       }
     },
     "configValidationMode": "warn",
@@ -481,7 +481,7 @@
     "isDashboardMonitoringPreconfigured": false
   },
   "package": {
-    "artifactDirectoryName": "serverless/aws-sentiment-analysis/dev/1721716916256-2024-07-23T06:41:56.256Z",
+    "artifactDirectoryName": "serverless/aws-sentiment-analysis/dev/1721803657954-2024-07-24T06:47:37.954Z",
     "artifact": ""
   }
 }

@@ -5,7 +5,7 @@ FROM public.ecr.aws/lambda/python:3.10
 WORKDIR /var/task
 
 # 필요한 패키지 설치
-RUN yum -y install gcc-c++ make ca-certificates
+RUN yum -y install gcc-c++ make ca-certificates git
 
 # requirements.txt 복사 및 패키지 설치
 COPY requirements.txt .

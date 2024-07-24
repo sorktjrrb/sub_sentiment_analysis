@@ -1,8 +1,11 @@
 import json
+import os
 import boto3
 import torch
-import os
-from transformers import BertModel, BertTokenizer
+from transformers import BertModel
+from kobert_tokenizer import KoBERTTokenizer
+from torch import nn
+
 
 # 환경 변수 설정
 os.environ['HF_HOME'] = '/tmp'
@@ -11,6 +14,11 @@ s3 = boto3.client('s3')
 bucket_name = 'sorktjrrb-aws-sentiment-analysis'
 model_key = 'kobert_model_epoch_5.pth'
 model_path = '/tmp/kobert_model_epoch_5.pth'
+
+# KoBERT 모델 및 토크나이저 불러오기
+tokenizer = KoBERTTokenizer.from_pretrained('skt/kobert-base-v1')
+bertmodel = BertModel.from_pretrained('skt/kobert-base-v1')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def load_model():
     try:
@@ -23,31 +31,47 @@ def load_model():
             print("모델 파일이 존재하지 않습니다.")
             raise FileNotFoundError("Downloaded model file not found.")
     except Exception as e:
+        print(f"Error downloading model: {e}")
         raise RuntimeError(f"Error downloading model: {e}")
 
-class EmotionClassifier(torch.nn.Module):
-    def __init__(self, num_classes):
+# BERTClassifier 클래스 정의
+class EmotionClassifier(nn.Module):
+    def __init__(self, bert, hidden_size=768, num_classes=7, dr_rate=0.8):  # 드롭아웃 비율을 0.8로 설정
         super(EmotionClassifier, self).__init__()
-        self.bert = BertModel.from_pretrained('monologg/kobert')
-        self.dropout = torch.nn.Dropout(0.3)
-        self.classifier = torch.nn.Linear(768, num_classes)
+        self.bert = bert
+        self.dr_rate = dr_rate
+        self.classifier = nn.Linear(hidden_size, num_classes)
+        if dr_rate:
+            self.dropout = nn.Dropout(p=dr_rate)
+        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.batch_norm = nn.BatchNorm1d(hidden_size)  # Batch Normalization 추가
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None):
-        outputs = self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-        pooled_output = outputs[1]
-        dropout_output = self.dropout(pooled_output)
-        logits = self.classifier(dropout_output)
-        return logits
+    def gen_attention_mask(self, token_ids, valid_length):
+        attention_mask = torch.zeros_like(token_ids)
+        for i, v in enumerate(valid_length):
+            attention_mask[i][:int(v)] = 1
+        return attention_mask.float()
+
+    def forward(self, token_ids, valid_length, segment_ids):
+        attention_mask = self.gen_attention_mask(token_ids, valid_length)
+        outputs = self.bert(input_ids=token_ids, token_type_ids=segment_ids, attention_mask=attention_mask)
+        pooler = outputs[1]
+        if self.dr_rate:
+            out = self.dropout(pooler)
+        else:
+            out = pooler
+        out = self.layer_norm(out)
+        out = self.batch_norm(out)  # Batch Normalization 적용
+        return self.classifier(out)
 
 # 모델 로드
 model_file_path = load_model()
-model = EmotionClassifier(num_classes=7)
-state_dict = torch.load(model_file_path, map_location=torch.device('cpu'))
-model.load_state_dict(state_dict, strict=False)  # strict=False 옵션 추가
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = EmotionClassifier(bertmodel, dr_rate=0.5).to(device)  # dr_rate를 저장된 모델의 값으로 설정
+with open(model_file_path, 'rb') as f:
+    state_dict = torch.load(f, map_location=torch.device('cpu'))
+model.load_state_dict(state_dict)
 model.eval()
-
-tokenizer = BertTokenizer.from_pretrained('monologg/kobert')
-
 label_map = {
     "fear": 0,
     "surprise": 1,
@@ -69,21 +93,52 @@ def preprocess(input_text):
     )
     return encoding['input_ids'], encoding['token_type_ids'], encoding['attention_mask']
 
-def predict(input_ids, token_type_ids, attention_mask):
+
+# 예측 함수
+def predict(sentence, model, tokenizer, device, max_len=128):
+    model.eval()
+    encoding = tokenizer.encode_plus(
+        sentence,
+        add_special_tokens=True,
+        max_length=max_len,
+        padding='max_length',
+        truncation=True,
+        return_tensors='pt'
+    )
+    input_ids = encoding['input_ids'].to(device)
+    attention_mask = encoding['attention_mask'].to(device)
+    token_type_ids = encoding['token_type_ids'].to(device)
+    valid_length = (input_ids != tokenizer.pad_token_id).sum(dim=1)
+
     with torch.no_grad():
-        logits = model(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-    return logits
+        outputs = model(input_ids, valid_length, token_type_ids)
+        predicted_class = torch.argmax(outputs, dim=1).item()  # .item()을 사용하여 스칼라 값을 얻음
+
+    return outputs  # logits를 반환하도록 수정됨
 
 def lambda_handler(event, context):
     try:
+        print("Lambda 함수가 시작되었습니다.")
         body = event['body']
-        if isinstance(body, bytes):
-            body = body.decode('utf-8')
-        data = json.loads(body)
-        input_text = data['input']
-
+        # JSON 파싱 시도
+        try:
+            if isinstance(body, bytes):
+                body = body.decode('utf-8')
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Invalid JSON format'})
+            }
+        input_text = data.get('input')
+        if not input_text:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Missing "input" in request body'})
+            }
         input_ids, token_type_ids, attention_mask = preprocess(input_text)
-        logits = predict(input_ids, token_type_ids, attention_mask)
+        # 여기서 device 인수 추가
+        logits = predict(input_text, model, tokenizer, device)
         probabilities = torch.nn.functional.softmax(logits, dim=-1).numpy()[0]
         emotion_probabilities = {reverse_label_map[i]: round(float(probabilities[i]) * 100, 2) for i in range(len(probabilities))}
         return {
@@ -91,6 +146,7 @@ def lambda_handler(event, context):
             'body': json.dumps({'logits': logits.numpy().tolist(), 'prediction': emotion_probabilities})
         }
     except Exception as e:
+        print(f"예외 발생: {e}")
         return {
             'statusCode': 500,
             'body': json.dumps({'error': str(e)})

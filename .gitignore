@@ -1,8 +1,6 @@
 # 필수로 넣어주어야 한다!
 node_modules/
 
-kobert_model_epoch_5.pth
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
